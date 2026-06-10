@@ -2,59 +2,60 @@ import { MongoClient } from "mongodb";
 import { HfInference } from "@huggingface/inference";
 import cosineSimilarity from "compute-cosine-similarity";
 import "dotenv/config";
+import readline from "readline";
 
 const hf = new HfInference(process.env.HF_TOKEN);
 
 const client = new MongoClient(process.env.MONGODB_URI);
 
 async function recommendCourses(studentText) {
-  try {
-    await client.connect();
+  const db = client.db("course-recommender");
+  const courses = db.collection("courses");
 
-    const db = client.db("course-recommender");
-    const courses = db.collection("courses");
+  console.log("\nCreating student embedding...");
 
-    console.log("Creating student embedding...");
+  const studentEmbedding = await hf.featureExtraction({
+    model: "BAAI/bge-small-en-v1.5",
+    inputs: studentText
+  });
 
-    const studentEmbedding = await hf.featureExtraction({
-      model: "BAAI/bge-small-en-v1.5",
-      inputs: studentText
+  console.log("Embedding created.");
+
+  const allCourses = await courses.find({}).toArray();
+
+  const scoredCourses = [];
+
+  for (const course of allCourses) {
+    if (!course.embedding) continue;
+
+    const score = cosineSimilarity(
+      studentEmbedding,
+      course.embedding
+    );
+
+    scoredCourses.push({
+      title: course.title,
+      description: course.description,
+      score
     });
+  }
 
-    console.log("Embedding created.");
+  scoredCourses.sort((a, b) => b.score - a.score);
 
-    const allCourses = await courses.find({}).toArray();
+  const topCourses = scoredCourses.slice(0, 10);
 
-    console.log(`Found ${allCourses.length} courses`);
+  console.log("\nTop 10 Matches:");
 
-    const scoredCourses = [];
+  topCourses.forEach((course, index) => {
+    console.log(
+      `${index + 1}. ${course.title} (${course.score.toFixed(3)})`
+    );
+  });
 
-    for (const course of allCourses) {
-      if (!course.embedding) continue;
-
-      const score = cosineSimilarity(
-        studentEmbedding,
-        course.embedding
-      );
-
-      scoredCourses.push({
-        title: course.title,
-        description: course.description,
-        score
-      });
-    }
-
-    scoredCourses.sort((a, b) => b.score - a.score);
-
-    const topCourses = scoredCourses.slice(0, 10);
-
-    console.log("\nTop 10 courses:");
-    console.log(topCourses);
-
-    const prompt = `
+  const prompt = `
 You are an educational advisor.
 
-Student:
+Student Profile:
 ${studentText}
 
 Candidate Courses:
@@ -65,54 +66,58 @@ ${topCourses
   )
   .join("\n")}
 
-Task:
 Recommend exactly 3 courses.
 
-Requirements:
-- Pick the courses that best match the student's interests.
+Rules:
+- Pick the best 3 courses.
 - Try to provide variety when possible.
-- Explain why each course is a good fit.
+- Explain why each course matches the student's interests.
 - Speak directly to the student.
 - Be friendly and encouraging.
 `;
 
-    console.log("\nSending prompt to LLM...\n");
+  console.log("\nGenerating recommendation...\n");
 
-    const response = await hf.chatCompletion({
-      model: "Qwen/Qwen2.5-7B-Instruct",
-      messages: [
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
-      max_tokens: 500
-    });
+  const response = await hf.chatCompletion({
+    model: "Qwen/Qwen2.5-7B-Instruct",
+    messages: [
+      {
+        role: "user",
+        content: prompt
+      }
+    ],
+    max_tokens: 500
+  });
 
-    console.log("\nRAW RESPONSE:");
-    console.log(JSON.stringify(response, null, 2));
-
-    await client.close();
-
-    return response.choices?.[0]?.message?.content ??
-      "No response returned from model.";
-  } catch (err) {
-    console.error("\nERROR:");
-    console.error(err);
-
-    try {
-      await client.close();
-    } catch {}
-
-    return "Something went wrong.";
-  }
+  return response.choices?.[0]?.message?.content ??
+    "Sorry, I couldn't generate a recommendation.";
 }
 
-// TEST
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout
+});
 
-const result = await recommendCourses(
-  "I am a 5th grader interested in computer science, AI, robotics, and building cool things."
+await client.connect();
+
+rl.question(
+  "Tell me about yourself and your interests:\n> ",
+  async (answer) => {
+    try {
+      const recommendation = await recommendCourses(
+        answer
+      );
+
+      console.log("\n========================");
+      console.log("COURSE RECOMMENDATIONS");
+      console.log("========================\n");
+
+      console.log(recommendation);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      await client.close();
+      rl.close();
+    }
+  }
 );
-
-console.log("\nFINAL OUTPUT:\n");
-console.log(result);
