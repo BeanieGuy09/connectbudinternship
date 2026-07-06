@@ -32,10 +32,10 @@ async function embedAllCourses() {
     for (const course of allCourses) {
         // Skip already-embedded courses
         //Delete if you want to redo embedding
-        if (course.embedding) {
-            console.log(`Skipping ${course.title}`);
-            continue;
-        }
+        //if (course.embedding) {
+        //    console.log(`Skipping ${course.title}`);
+        //    continue;
+        //}
         //Delete (or //) above if you want to redo embedding
 
         const text = `
