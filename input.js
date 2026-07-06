@@ -112,9 +112,7 @@ ${studentText}
   });
 
   const allCourses = await courses.find({}).toArray();
-  console.log(
-    `Loaded ${allCourses.length} courses`
-  );
+
   const scoredCourses = [];
 
   for (const course of allCourses) {
@@ -146,7 +144,6 @@ ${studentText}
   //   );
   //});
 
-console.log(profile)
   const prompt = `
 You are an experienced educational advisor.
 
@@ -229,9 +226,6 @@ Return a concise profile.
   const profile =
     profileResponse.choices?.[0]?.message?.content ?? "";
 
-  console.log("\nStudent Profile:");
-  console.log(profile);
-
   const studentEmbedding = await hf.featureExtraction({
     model: "BAAI/bge-small-en-v1.5",
     inputs: `
@@ -244,9 +238,7 @@ ${studentText}
   });
 
   const allTutors = await tutors.find({}).toArray();
-  console.log(
-    `Loaded ${allTutors.length} tutors`
-  );
+
   const scoredTutors = [];
 
   for (const tutor of allTutors) {
