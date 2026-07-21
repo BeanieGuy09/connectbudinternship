@@ -52,12 +52,14 @@ app.post("/chat", async (req, res) => {
       reply: response
     });
   } catch (err) {
-    console.error(err);
+  console.error("==== SERVER ERROR ====");
+  console.error(err);
+  console.error(err?.stack);
 
-    res.status(500).json({
-      error: "Internal server error."
-    });
-  }
+  res.status(500).json({
+    error: err.message ?? "Internal server error."
+  });
+}
 });
 
 const PORT = 3001;
